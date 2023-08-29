@@ -74,6 +74,7 @@ void histogram_equalization(Mat inputImage, Mat &outputImage)
         // double xigema_distribution_value = 0.0;
         for (int j = 0; j < i; j++)
         {
+            // 这个就是累计概率分布
             xigema_distribution_value += distribution[j];
         }
         // round返回的是指针类型，但是他提示我必须
@@ -177,4 +178,85 @@ void multiImshow(string str, vector<Mat> vectorImage)
         resize(vectorImage[i], imgROI, Size(width, height));
     }
     imshow(str, dstImage);
+}
+
+
+
+double* getCumulative(Mat inputImage) 
+{
+    double *cumulativeDistribution;
+    cumulativeDistribution = (double *)malloc(sizeof(double) * 256);
+    memset(cumulativeDistribution, 0.0, sizeof(double) * 256);
+    double *distribution = getDistribution(inputImage);
+    double s = 0.0;
+    for (int i = 0; i < 256; i++)
+    {
+        for (int j = 0; j < i; j++)
+        {
+            s += distribution[j];
+        }
+        cumulativeDistribution[i] = s;
+        s = 0.0;
+    }
+    return cumulativeDistribution;
+}
+
+void histogram_match(Mat inputImage, Mat objectImage, Mat &outputImage) 
+{
+    // 我们刚才分析过了
+    // 1 获取输入图像和给定分布的累计概率分布
+    // 2 计算双方累计概率分布的差异
+    // 3 找到最小的差异，返回对应的灰度值，就是对原始图像灰度值的映射
+    // 4 根据映射map改变原始图像，即使最终规定化后的结果。
+    // 我们之前在计算直方图规定化的时候其实已经计算好了累计概率分布。
+    // 我们快速的重新定义一个函数把
+    // 这样定义比较麻烦，我们还需要在调用函数中定义该传入参数，注意我们如果需要在主函数中
+    // 调用该返回值，那么我们必须将该传出参数从主函数中一步步传过来，否则将无法调用
+    // 我们需要分别获取输入图像和给定分布，本案例中是objectImage图像的累计概率分布
+    // 使用传出参数不方便，我快速改下吧，使用返回值吧
+    // Jixu 
+    // 分别获取两个图像的累计概率分布
+    
+    
+    double *cumulative_distribution_input = getCumulative(inputImage);
+    double *cumulative_distribution_object = getCumulative(objectImage);
+    
+
+    // 下一步是计算差异
+    // 我们选择的是定好一个cumulative_distribution_input，然后计算这个值和每一个
+    // cumulative_distribution_object的差异，找到最小的那个差异对应的索引值就是映射的值
+    int index;
+    // 注意这里的数据类型定义错误了，应该是double。因为这里的double是概率分布，如果使用int定义
+    // 接收到的值会强制转换，转换后的值都是0.所以造成刚才的图像像素值全是0.纯黑背景。大家这块要注意
+    // 图像数据的存储很重要。
+    double min_value;
+    double s = 0.0;
+    Mat mapping(1, 256, CV_8UC1);
+    for (int i = 0; i < 256; i++)
+    {
+        // 先定义一个min_value,第一个索引差异,直接从第二个开始循环
+        // 这个出现负数的概率不大
+        min_value = cumulative_distribution_input[i] - cumulative_distribution_object[0];
+        // 这里翻了一个严重的错误，我哦们应该根据两个1*256去计算得到差异矩阵256*256
+        // 这块习惯性的定义循环按照之前计算累计概率分布的循环去定义了。
+        // 大家在晚上脑袋蒙的时候还是出去转一圈休息一下，要不效率很低。
+        for (int j = 1; j < 256; j++)
+        {
+            // 我这应该没有取绝对值。因为可能出现负数
+            s = fabs(cumulative_distribution_input[i] - cumulative_distribution_object[j]);
+            if (min_value > s)
+            {
+                min_value = s;
+                index = j;
+            }
+        }
+        // 这样循环一次，我们就会得到对应的index，然后我们可以根据index和i去定义映射图像
+        // 我们可以使用指针去定义该映射，也可以使用Mat数据类型去定义，Mat数据类型去定义的
+        // 好处是我们可以直接使用opencv官方定义的LUT函数去映射原始图像。我们使用Mat定义
+        // 映射图,这里注意index的数据类型，index是int。我们将其强制转换为uchar
+        // 这个关系应该也不大
+        mapping.at<uchar>(i) = static_cast<uchar>(index);
+    }
+    // 然后使用映射图去更新原始图像即可,还是很简单的
+    LUT(inputImage, mapping, outputImage);
 }

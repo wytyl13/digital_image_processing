@@ -22,8 +22,6 @@ using namespace cv;
  */
 double* getDistribution(Mat inputImage);
 
-
-
 /**
  * @Author: weiyutao
  * @Date: 2023-08-28 20:28:14
@@ -56,14 +54,23 @@ void histogram_equalization(Mat inputImage, Mat &outputImage);
 void multiImshow(string str, vector<Mat> vectorImage);
 
 
-
-
-
-
-
-
-
-
-
-
+/**
+ * @Author: weiyutao
+ * @Date: 2023-08-29 22:45:36
+ * @Parameters: inputImage需要传入一张原始图像
+ * @Parameters: outputImage传出参数，输出结果图像
+ * @Parameters: objectImage这个就当做我们的目标图像吧，我们需要我们的输出图像的分布无限接近他的分布
+ * @Return: null
+ * @Description: 这里注意一点，我们是自己给定一个已知的分布，还是从一张图像中获取分布。我们一般选择
+ * 后者，比较简单那。所以我们还需要定义一个传入参数。
+ */
+void histogram_match(Mat inputImage, Mat objectImage, Mat &outputImage);
+/**
+ * @Author: weiyutao
+ * @Date: 2023-08-29 22:50:42
+ * @Parameters: 
+ * @Return: 
+ * @Description: 累计概率分布，我们需要选择一种方式拿大这个概率分布，我们试下传出参数把
+ */
+void histogram_match(Mat inputImage, Mat objectImage, Mat &outputImage);
 #endif
