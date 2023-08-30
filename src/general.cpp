@@ -260,3 +260,69 @@ void histogram_match(Mat inputImage, Mat objectImage, Mat &outputImage)
     // 然后使用映射图去更新原始图像即可,还是很简单的
     LUT(inputImage, mapping, outputImage);
 }
+
+void histogramLocalEqualization(Mat inputImage, Mat &outputImage, int kernelSize) 
+{
+    // 刚才我们已经分析了扫描的操作
+    // 1 扫描固定区域，并且计算扫描区域的累计概率分布
+    // 2 根据扫描区域的中心点对应的概率分布去计算对应的映射，这里注意是什么方法，比如本次使用的是均衡化，那就去计算均衡化映射的灰度值
+    // 3 改变中心点的灰度值根据映射图
+    // 4 逐次扫描，步伐是1
+    // 就是这些，其实只是对之前的灰度值变换方法的一个改进
+
+    // 首先定义扫描的起始点。扫描的起始点其实就是核尺寸的一半，这里注意因为我们需要改变的每次扫描的中心点
+    // 所以我们的核尺寸一定是奇数。
+    int half_kernel_size = kernelSize / 2;
+    int width = inputImage.cols;
+    int height = inputImage.rows;
+    double *cumulative_distribution;
+    outputImage = inputImage.clone();
+
+    // 为了解决图像边框没有被处理的问题，我们进行0填充，也即给图像的边框填充0
+    // 首先确定填充的范围，可以发现每个边填充的大小就是核尺寸的一半
+    // 我们定义一个填充完后的图像吧
+    int out_width = width + half_kernel_size * 2;
+    int out_height = height + half_kernel_size * 2;
+    // 我们定义一个填充后的图像，使用0填充，8比特单通道
+    Mat padding_mat = Mat::zeros(Size(out_width, out_height), CV_8UC1);
+    // 然后将原始输入图像粘贴到该图像制定的额区域。
+    // 首先定义区域cv::Mat operator()(const cv::Rect &roi) const
+    // Rect_(int _x, int _y, int _width, int _height)
+    Mat roi = padding_mat(Rect(half_kernel_size, half_kernel_size, width, height));
+    inputImage.copyTo(roi);
+
+    // 打印一下看看对不对,可以应该没问题
+    // 然后我们基于新制作的图像来改变下面的循环
+    // 首先开始扫描
+    // 注意宽对应的列数，高对应的行数，宽是x，高是y，原点是左上角0,0
+    time_t start, end;
+    start = time(NULL);
+    // 我感觉是这个for循环出现问题了
+    for (int row = half_kernel_size; row < (out_height - half_kernel_size); row++)
+    {
+        // 定义子区域
+        // Rect_(int _x, int _y, int _width, int _height), 起始点和宽高
+        // 起始点是原点，也即扫描的中心点减去half_kernel_size
+        // 注意这里我们还需要定义列的循环才可以进行子区域的定义
+        for (int col = half_kernel_size; col < (out_width - half_kernel_size); col++)
+        {
+            Mat subMat = padding_mat(Rect((col - half_kernel_size), (row - half_kernel_size), kernelSize, kernelSize));
+            // 好了我们已经定义好了扫描的子区域，这里注意不要对子区域进行更改操作，否则将会更改原图
+            // 我感觉这个定义Mat的方法应该绑定的是原始图像的地址。大家可以试下
+            // 不过更改原始图像也没关系，我们后续不需要使用到它
+            // 下面我们计算子区域的累计概率分布
+            cumulative_distribution = getCumulative(subMat);
+            // 然后就可以根据映射改编原始图像了
+            // 我们需要改变扫描区域的中心点，对应的原始图像的坐标是
+            // 因为是均衡化处理，所以使用累计概率分布乘以255即可，8比特图像最大灰度值是255
+            // 我们需要找到子区域图像中心点的灰度值，因为我们要使用其对应的映射去改变原始图像中心点的灰度值
+            // 注意子区域的中心点就是核尺寸的一半
+            // 有问题
+            int index = (int)subMat.at<uchar>(half_kernel_size, half_kernel_size);
+            // 试下看看
+            outputImage.at<uchar>(row - half_kernel_size, col - half_kernel_size) = (uchar)(cumulative_distribution[index] * 255);
+        }
+    }
+    end = time(NULL);
+    printf("%ld", (end - start));
+}

@@ -73,11 +73,11 @@ int main(int argc, char const *argv[])
     // // imshow("histogram equalization", outputImage);
 
     // 我们想要实现直方图规定化
-    Mat inputImage = imread("c:/users/80521/desktop/dark.webp");
+    Mat inputImage = imread("c:/users/80521/desktop/dark.webp", 0);
     Mat objectImage = imread("c:/users/80521/desktop/object.webp");
     Mat outputImage;
     // 我去，这里是不是没有定义引用传参，。。。。。。我看下不是这个问题
-    histogram_match(inputImage, objectImage, outputImage);
+    // histogram_match(inputImage, objectImage, outputImage);
     // vector<Mat> multiImage;
     // multiImage.push_back(inputImage);
     // multiImage.push_back(objectImage);
@@ -88,32 +88,44 @@ int main(int argc, char const *argv[])
 
     // 下面我们试下三通道图像的规定化和均衡化
     // 首先将图像分类为三个通道
-    Mat channel_input[3];
-    Mat channel_object[3];
-    split(inputImage, channel_input);
-    // 这里的问题
-    split(objectImage, channel_object);
-    namedWindow("original color image", 0);
-    namedWindow("object color image", 0);
-    namedWindow("histogram equalization color image", 0);
-    namedWindow("histogram match color image", 0);
-    for (int i = 0; i < 3; i++)
-    {
-        histogram_equalization(channel_input[i], channel_input[i]);
-    }
-    merge(channel_input, 3, outputImage);
+    // Mat channel_input[3];
+    // Mat channel_object[3];
+    // split(inputImage, channel_input);
+    // // 这里的问题
+    // split(objectImage, channel_object);
+    // namedWindow("original color image", 0);
+    // namedWindow("object color image", 0);
+    // namedWindow("histogram equalization color image", 0);
+    // namedWindow("histogram match color image", 0);
+    // namedWindow("local histogram image", 0);
+    // for (int i = 0; i < 3; i++)
+    // {
+    //     histogram_equalization(channel_input[i], channel_input[i]);
+    // }
+    // merge(channel_input, 3, outputImage);
 
-    imshow("original color image", inputImage);
-    imshow("object color image", objectImage);
-    imshow("histogram equalization color image", outputImage);
+    // imshow("original color image", inputImage);
+    // imshow("object color image", objectImage);
+    // imshow("histogram equalization color image", outputImage);
 
-    for (int i = 0; i < 3; i++)
-    {
-        histogram_match(channel_input[i], channel_object[i], channel_object[i]);
-    }
-    Mat outputImageObject;
-    merge(channel_object, 3, outputImageObject);
-    imshow("histogram match color image", outputImageObject);
+    // for (int i = 0; i < 3; i++)
+    // {
+    //     histogram_match(channel_input[i], channel_object[i], channel_object[i]);
+    // }
+    // Mat outputImageObject;
+    // merge(channel_object, 3, outputImageObject);
+    // imshow("histogram match color image", outputImageObject);
+
+
+    // 我们想要实现灰度直方图局部均衡化处理
+    // 注意扫描的尺寸为奇数
+    histogramLocalEqualization(inputImage, outputImage, 77);
+
+    vector<Mat> multiImage;
+    multiImage.push_back(inputImage);
+    multiImage.push_back(outputImage);
+    string str_window = "histogram local equalization";
+    multiImshow(str_window, multiImage);
 
 
 

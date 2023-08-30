@@ -73,4 +73,21 @@ void histogram_match(Mat inputImage, Mat objectImage, Mat &outputImage);
  * @Description: 累计概率分布，我们需要选择一种方式拿大这个概率分布，我们试下传出参数把
  */
 void histogram_match(Mat inputImage, Mat objectImage, Mat &outputImage);
+
+
+
+
+
+
+/**
+ * @Author: weiyutao
+ * @Date: 2023-08-30 17:43:01
+ * @Parameters: inputImage,输入图像
+ * @Parameters: outputImage,传出参数，输出图像
+ * @Parameters: 因为是局部扫描，所以我们需要定义一个扫描尺寸,我们暂且称之为核大小吧
+ * @Return: null
+ * @Description: 
+ */
+void histogramLocalEqualization(Mat inputImage, Mat &outputImage, int kernelSize);
+
 #endif
