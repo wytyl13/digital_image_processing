@@ -326,3 +326,428 @@ void histogramLocalEqualization(Mat inputImage, Mat &outputImage, int kernelSize
     end = time(NULL);
     printf("%ld", (end - start));
 }
+
+void histogram_local_thread(Mat inputImage, Mat &outputImage,
+                            int side_length, int thread_numbers) 
+{
+
+    time_t start, end;
+    start = time(NULL);
+    // 我们正式开始
+    // 首先我们需要根据传入的线程参数将原始图像进行切分
+    /* 
+    让我们首先把问题简单化
+        我们这样切分线程，我们分别将宽和高切分成m和n等分，m*n = thread_numbers.
+        以上案例我们将原始图像切分为4个线程，长边和短边均是2
+        我们可以根据长边和短边的线程数来定义每个线程图像对应的尺寸
+            问题简单化是我们不考虑不能整除的部分，我们直接使用int接受，向下取整
+
+        我们这样定义每个线程扫描的图像
+            根据原点和宽高去定义，我们会根据对应的线程索引去计算该线程对应的
+            图像中的原点，宽和高。
+    切分完线程以后我们可以对每一个线程进行同样的操作，也就是自适应直方图均衡化
+    然后每个线程回去改变原始图像的数据，最后得到均衡化的图像
+     */
+
+    // 让我们先来定义每一个线程的x, y, width, height.
+    // 加入我们先写死宽边为4个线程cols_thread_numbers，然后我们可以定义高边的线程数
+    // 宽边线程数的一半不要超过6.自己可以随意定义，也可以写死
+    // 注意这里我们虽然没有写死宽边线程数，但是我们并没有对线程不能整除的情况下作兼容
+    // 所以如果出现rows_thread_numbers不能被整除的情况下会出现错误
+    // 大家可以自己对不能整除的情况做兼容。
+    int cols_thread_numbers = (thread_numbers / 2 > 5) ? 4 : (thread_numbers / 2);
+    int rows_thread_numbers = thread_numbers / cols_thread_numbers;
+
+    // 然后我们可以根据线程数来计算对应的每个线程的宽和高
+    int rows = inputImage.rows;
+    int cols = inputImage.cols;
+
+
+    // 注意我们之前使用int去接受这个结果，造成我们舍弃了未被整除部分，现在把它加上
+    // 按照刚才那个案例，原始图像宽是7，宽边线程数是3，那么我们之前使用int接受会造成
+    // int i = 7 / 3 = 2,这样我们使用3个线程，每个线程2个，覆盖6个，舍弃掉1个，现在我们把1覆盖上
+    // 考虑还是原来的3个线程
+    // int mod = 7 % 3 = 1;
+    // int cols_thread = cols / cols_thread_numbers + mod = 3; 这是前两个线程的宽
+    // 最后一个线程的宽是 7 - cols_thread * 2 = 1；
+    // 下面我们按照这个想法来定义每一个线程的宽高，来覆盖之前舍弃掉的图像最右侧和最下侧部分
+    int cols_mod = cols % cols_thread_numbers;
+    int rows_mod = rows % rows_thread_numbers;
+
+    // 注意考虑未整除部分，我们在上个视频已经分析了
+    // 所以我们直接在for循环之前这样定义即可
+    // 这个是除了最右侧和最左侧线程的所有线程的宽高，注意该宽高对应的是原始图像，不是padding后的图像
+    int cols_thread = cols / cols_thread_numbers + cols_mod;
+    int rows_thread = rows / rows_thread_numbers + rows_mod;
+
+    // 这是前面的线程，但是我们需要在循环中定义，因为我们要做判断
+    // 我们可以根据线程索引去定义每一个线程的x，y
+    // 我们先来看第一行，线程索引号每增加一个，对应的x轴坐标改变，y轴坐标不变
+    // 注意我们这里需要定义的是每一个线程对应的padding后的原始图像的原点坐标
+    // 我们需要考虑x++多少，应该是每一个线程的宽cols_thread
+    // 这里需要注意一下我们对应的是padding后的原始图像
+    // 分别判断当前索引对应的线程是否是左上角，右上角，左下角和右下角
+    bool left_upper, right_upper, left_bottom, right_bottom;
+    int left_upper_index = 0;
+    int right_upper_index = cols_thread - 1;
+    int left_bottom_index = thread_numbers - cols_thread;
+    int right_bottom_index = thread_numbers - 1;
+    bool up, bottom, left, right;
+    int half_side_length = side_length / 2;
+    // 因为问题简单化了，所以每一个线程对应的宽高都是一样的，都是原始图像
+    // 分配的宽高+2倍的half_side_length;
+    int width, height;
+
+    // 注意Mat的横轴和纵轴分别对应是宽和高，也就是cols和rows
+    // 原点在左上角
+    int padding_cols = cols + 2 * half_side_length;
+    int padding_rows = rows + 2 * half_side_length;
+    // 注意opencv中基本上所有类的构造函数都是width, height.
+    // 只有极少部分，比如at是先高后宽
+    Mat padding_mat = Mat::zeros(Size(padding_cols, padding_rows), CV_8UC1);
+    Mat roi = padding_mat(Rect(half_side_length, half_side_length, cols, rows));
+    inputImage.copyTo(roi);
+
+    vector<thread *> thread_vectors;
+    outputImage = padding_mat.clone();
+
+    // 注意上次视频我们在for循环中定义了cols_thread和rows_thread,但是注意这里我们需要用到cols_thread
+    // 所以我哦们必须再for循环之前定义该变量，注意因为最右侧和最下侧的cols_thread不同与其他的线程
+    // 但是for循环只会循环到最右侧和最下侧之前的线程，所以这里我们不用在for循环之前重新定义最右侧和最下侧
+    // 线程的宽高，直接使用其他线程的宽高即可。
+    // 注意这里cols_thread不用考虑最右侧和最下侧，因为我们考虑的x和y对应的是当前线程的原点坐标
+    // 不需要考虑最右侧和最下侧的线程
+    for (int i = 0, x = 0, y = 0; i < thread_numbers; i++, x += cols_thread)
+    {
+
+        left_upper = (i == left_upper_index);
+        right_upper = (i == right_upper_index);
+        left_bottom = (i == left_bottom_index);
+        right_bottom = (i == right_bottom_index);
+        // 0 % 2 = 0, 2 % 2 = 0
+        // 注意这里的变量错误了，不应该是cols_thread,它是每一个线程的宽
+        // 我们需要的是宽线程数，cols_thread_numebrs;
+        left = (i % cols_thread_numbers == 0);
+        up = (i >= left_upper_index && i <= right_upper_index);
+        bottom = (i >= left_bottom_index && i <= right_bottom_index);
+        // 1 % 2 = 1; 3 % 2 = 1
+        right = (i % cols_thread_numbers == 1);
+        // 我们需要定义第二行的线程
+        // 现成每加一行y会加rows_thread，但是注意需要排除掉左上角的线程
+        // 并且每行的首个线程。下面我们来定义这些条件
+        // 我们还需要定义一个判断是否为上下左右边的变量
+        // 只有当当前线程在最左侧并且非左上角线程的时候这个条件才会生效
+        if (left && !left_upper)
+        {
+            x = 0;
+            y += rows_thread;
+        }
+
+        // 我们将简单问题复杂化，我们首先考虑的时最右侧和最下侧这两边的宽高和其他地方不一样
+        // 最右侧的宽不一样，最下侧的高不一样。但是这样我们就不能在循环外面定义
+        // width height 了
+        // 我们需要考虑最右侧和最下侧和其他
+        // 让我们来定义一下每一个线程对应的宽高，我们需要区分最右侧最下侧和其他
+        // 先考虑最右侧，我们保证输入的线程数不变。我们更改宽高来覆盖整体图像。此时不能使用
+        // int去接受参数了，因为它起到的是一个向下取整的效果
+        // 因为我们在for循环之外已经定义了当前线程的宽高，所以这里我们不需要重复定义了
+        // 我们需要考虑当前线程为最右侧和最下侧线程的时候的线程宽高
+        // 这里不能根据cols_thread去定义cols_thread.因为在下一个循环中可能会存在错误赋值的情况
+        // 所以我们需要重新计算最右侧和最下侧的cols_thread和rows_thread
+        if (right)
+        {
+            cols_thread = cols - (cols / cols_thread_numbers + cols_mod) * (cols_thread_numbers - 1);
+        }
+        if (bottom)
+        {
+            rows_thread = rows - (rows / rows_thread_numbers + rows_mod) * (rows_thread_numbers - 1);
+        }
+        width = cols_thread + 2 * half_side_length;
+        height = rows_thread + 2 * half_side_length;
+
+
+        // 好了我们测试下
+        // 但是需要注意的是我们的width和height都要在原始尺寸的基础上考虑加上padding
+        // width = cols_thread + half_side_length * 2;
+        // height = rows_thread + half_side_length * 2;
+        // OKceshiyixia
+        // OK,让我们测试下是否正确
+        // 可以了线程的原点坐标和宽高已经测试正确
+        // 下面我们就可以对每一个线程图像进行操作了
+        // 注意我们这里的每一个线程是从padding后的图像中拿
+        // 拿到的是引用地址，也就是说我们对temp_mat中的所有
+        // 像素的修改也会影响到原始图像
+        // 我们来定义padding_mat
+        // 我们应该让temp_mat作为outputImage的子图
+        // temp_mat供线程函数去改变原图
+        // temp_mat_供线程函数去扫描
+        Mat temp_mat = outputImage(Rect(x, y, width, height));
+        Mat temp_mat_ = padding_mat(Rect(x, y, width, height));
+
+        // 下面我们要在该函数中创建多个线程分别处理每一个线程图像
+        // 注意这个是一个构造函数，是c++封装的windows系统的线程操作。
+        // 我们在该函数中创建多个线程，数量根据thread_numbers的数量决定
+        // 然后每一个线程共享所有虚拟内存，注意线程和进程的区别。。。
+        // 进程是CPU的最小调度单元，现成是CPU的最小哦计算单元
+        // 在linux中我们可以在一个主函数中创建多个进程，当某一个进程被创建以后，
+        // 该进程享有创建进程后的所有代码。
+        // 而线程一般是windows的概念，在windows中当一个进程在创建线程以后
+        // 该进程将被称为主线程。。。。linux中也可以创建线程
+        // 这里我们可以根据以下两点来区分进程和线程，可以将线程理解为一个函数
+        // 该函数被执行完以后结束，而进程不同，进程共享该进程被创建以后的所有代码。
+        // 如果有需要详细了解的可以参考深入理解计算机系统，c++已经将系统编程中
+        // 的线程操作封装好了，我们只需要new一个实例即可。在该实例中我们需要传入
+        // 线程函数和对应的需要传入线程函数的参数
+            // 进程是CPU的最小调度单元，现成是CPU的最小哦计算单元
+            // 在linux中我们可以在一个主函数中创建多个进程，当某一个进程被创建以后，
+            // 该进程享有创建进程后的所有代码。
+        // thread<_Callable, _Args...>(_Callable &&__f, _Args &&...__args)
+        // 我们需要创建线程函数，注意该线程函数的定义有一个要求，因为我们在for循环中
+        // 针对不同的线程调用的时同一个线程函数，所以我们需要将该线程函数可以通用的
+        // 去操作每一个线程扫描的图像，这个就是唯一的要求。
+        // 当代码执行到改行的时候，线程被创建，然后执行线程函数。
+        // 该线程函数的执行是该子线程的操作，而主线程会继续在本函数中执行for循环
+        // 接着创建下一个线程。。如此往复，子线程和主线程的操作可以同步。CPU只是
+        // 在操作上下文切换。但是这里需要注意主线程可能会先于子线程提前结束
+        // 所以需要注意防止主线程先于子线程提前结束的情况。因为我们这里每一个子线程的操作
+        // 量都很大，所以主线程极有可能先结束。主线程结束意味着我们所有在主线程中定义的
+        // 变量都会被释放。如果这些变量被释放，子线程中调用的这些变量将无效。或者出现错误
+        // 下面我们来定义该线程函数
+        // 我们首先可以确定到这个函数这块都是正确的，因为我们
+        // 刚才测试了每一个temp_mat都是正常的
+        thread *thread_pointer = new thread(thread_function, temp_mat, temp_mat_, \
+            cols_thread, rows_thread, half_side_length, side_length);
+        // 主线程在创建完每一个子线程以后把该线程放在容器中
+        thread_vectors.push_back(thread_pointer);
+    }
+
+    // 注意for循环执行完毕以后，所有的子线程都已经被创建了
+        // 但是有一个问题就是for循环式主线程在执行，执行完毕以后主线程
+        // 指导执行结束，这可能出现一个问题就是主函数先执行完毕了
+        // 那么此时我们在线程函数中处理主函数的数据，temp_mat对应的就是主函数
+        // 的部分地址。主函数中所有的变量都已经被释放了，我们在对该地址进行操作
+        // 会报错。所以我们需要处理一下，也就是让主函数等待所有的子线程处完毕以后
+        // 再退出，我们需要在for循环外处理，否则我们不能保证每一个线程
+        // 都先被正常创建。
+    // 然后我们在主线程调用的该函数即将结束之前使用join函数
+    // 让主线程等待每一个子线程执行结束后再执行，也即阻塞
+    for (int i = 0; i < thread_vectors.size(); i++)
+    {
+        thread *thread_i = thread_vectors[i];
+        // 排查了好久，原来是这块错误了
+        // 这块应该是判断thread_i != null，如果判断错误，我们将没有
+        // 定义主线程阻塞等待子线程执行结束后再执行
+        if (thread_i != NULL)
+        {
+            thread_i->join();
+            // 阻塞结束后删除子线程，并且置空
+            delete thread_i;
+            thread_i = NULL;
+        }
+    }
+    // HAOLE，测试下
+    end = time(NULL);
+    cout << end - start << endl;
+    // 注意这里我们需要排除outputimage的padding。
+    outputImage = outputImage(Rect(half_side_length, half_side_length, cols, rows));
+}
+
+
+
+void thread_function(Mat temp_mat, Mat temp_mat_, int cols_thread, int rows_thread, \
+    int half_side_length, int side_length) 
+{
+    // 注意这里的循环次数,循环次数还是3，在刚才那个案例中，其实就是
+    // 我们计算的cols_thread and rows_thread.
+    // Mat temp_mat_ = temp_mat.clone();
+
+    
+    for (int row = 0; row < rows_thread; row++)
+    {
+        for (int col = 0; col < cols_thread; col++)
+        {
+            // 然后就是常规操作
+            // 我们需要进行扫描操作
+            Mat sub_mat = temp_mat_(Rect(col, row, side_length, side_length));
+            // 计算该子图的累计分布
+            double *cumulative = getCumulative(sub_mat);
+            // 找到扫描区域最中心的数值作为索引
+            // half_side_length,当然我们也可以计算，但是我们传参更方便
+            int index = (int)sub_mat.at<uchar>(half_side_length, half_side_length);
+            // 注意这步是常规操作，直方图均衡化需要使用累计分布乘上最大灰度值做映射。
+            // 但是这里注意，我们在该子线程对temp_mat做了修改，然后下个循环又会
+            // 从temp_mat取值，而且取值的可能会存在取到修改后的图像，如果我们不做干预
+            // 处理后的图像会存在明显的白线，这是因为我们前脚刚处理完均衡化
+            // 然后后脚我们就使用均衡化的数据去对下一个扫描区域进行均衡化，
+            // 均衡化一般会提高当前像素的灰度值
+            // 所以这里我们需要干预。我们对另一个传参进行扫描操作就可以很好的
+            // 解决这个问题。
+            temp_mat.at<uchar>(row + half_side_length, col + half_side_length) = \
+            (uchar)(cumulative[index] * 255);
+        }
+    }
+}
+
+
+
+
+void histogram_local_statistics_thread(Mat inputImage, Mat &outputImage,
+                            int side_length, int thread_numbers, double k[]) 
+{
+
+    time_t start, end;
+    start = time(NULL);
+    int cols_thread_numbers = (thread_numbers / 2 > 5) ? 4 : (thread_numbers / 2);
+    int rows_thread_numbers = thread_numbers / cols_thread_numbers;
+
+    int rows = inputImage.rows;
+    int cols = inputImage.cols;
+    int cols_mod = cols % cols_thread_numbers;
+    int rows_mod = rows % rows_thread_numbers;
+    int cols_thread = cols / cols_thread_numbers + cols_mod;
+    int rows_thread = rows / rows_thread_numbers + rows_mod;
+    bool left_upper, right_upper, left_bottom, right_bottom;
+    int left_upper_index = 0;
+    int right_upper_index = cols_thread - 1;
+    int left_bottom_index = thread_numbers - cols_thread;
+    int right_bottom_index = thread_numbers - 1;
+    bool up, bottom, left, right;
+    int half_side_length = side_length / 2;
+    int width, height;
+
+    int padding_cols = cols + 2 * half_side_length;
+    int padding_rows = rows + 2 * half_side_length;
+    Mat padding_mat = Mat::zeros(Size(padding_cols, padding_rows), CV_8UC1);
+    Mat roi = padding_mat(Rect(half_side_length, half_side_length, cols, rows));
+    inputImage.copyTo(roi);
+
+    vector<thread *> thread_vectors;
+    outputImage = padding_mat.clone();
+
+    // 我们计算输入图像的统计量
+    // 我们需要分别计算均值和方差，然后将均值和方差传递进县城函数中
+    double mean_variance[2] = {0.0};
+    cal_mean_variance(inputImage, mean_variance);
+    double global_max_value;
+    minMaxLoc(inputImage, 0, &global_max_value, 0, 0);
+
+    for (int i = 0, x = 0, y = 0; i < thread_numbers; i++, x += cols_thread)
+    {
+
+        left_upper = (i == left_upper_index);
+        right_upper = (i == right_upper_index);
+        left_bottom = (i == left_bottom_index);
+        right_bottom = (i == right_bottom_index);
+        left = (i % cols_thread_numbers == 0);
+        up = (i >= left_upper_index && i <= right_upper_index);
+        bottom = (i >= left_bottom_index && i <= right_bottom_index);
+        // 1 % 2 = 1; 3 % 2 = 1
+        right = (i % cols_thread_numbers == 1);
+        if (left && !left_upper)
+        {
+            x = 0;
+            y += rows_thread;
+        }
+
+        if (right)
+        {
+            cols_thread = cols - (cols / cols_thread_numbers + cols_mod) * (cols_thread_numbers - 1);
+        }
+        if (bottom)
+        {
+            rows_thread = rows - (rows / rows_thread_numbers + rows_mod) * (rows_thread_numbers - 1);
+        }
+        width = cols_thread + 2 * half_side_length;
+        height = rows_thread + 2 * half_side_length;
+        Mat temp_mat = outputImage(Rect(x, y, width, height));
+        Mat temp_mat_ = padding_mat(Rect(x, y, width, height));
+        // 注意这个函数没有更换过来
+        thread *thread_pointer = new thread(thread_statistics_function, temp_mat, temp_mat_, \
+            cols_thread, rows_thread, half_side_length, side_length, mean_variance, global_max_value, k);
+        thread_vectors.push_back(thread_pointer);
+    }
+
+    for (int i = 0; i < thread_vectors.size(); i++)
+    {
+        thread *thread_i = thread_vectors[i];
+        if (thread_i != NULL)
+        {
+            thread_i->join();
+            delete thread_i;
+            thread_i = NULL;
+        }
+    }
+    // HAOLE，测试下
+    end = time(NULL);
+    cout << end - start << endl;
+    outputImage = outputImage(Rect(half_side_length, half_side_length, cols, rows));
+}
+
+
+
+
+void thread_statistics_function(Mat temp_mat, Mat temp_mat_, int cols_thread, int rows_thread, \
+    int half_side_length, int side_length, double mean_variance[], double global_max_value, double k[]) 
+{
+    // 首先，我们所有的工作都是在线程函数中进行的
+    // 现成函数需要拿到一些指标，如输入图像的统计量，线程函数中扫描区域的统计量
+    // 我们可以在调用线程函数的函数中定义全局图像的统计量，然后将该全局统计量传入线程函数中
+    // 好了我们已经接受到参数了，我们还需要以下指标
+    double G_mean = mean_variance[0];
+    double G_variance = mean_variance[1];
+    double local_mean_variance[2] = {0};
+    double L_mean, L_variance, const_value, local_max_value;
+    // 顺序分贝代表均值的最小因子，最大因子；方差的最小因子，最大因子
+    double k0 = k[0];
+    double k1 = k[1];
+    double k2 = k[2];
+    double k3 = k[3];
+    for (int row = 0; row < rows_thread; row++)
+    {
+        for (int col = 0; col < cols_thread; col++)
+        {
+            Mat sub_mat = temp_mat_(Rect(col, row, side_length, side_length));
+            // 计算子图也就是扫描区域的统计指标
+            cal_mean_variance(sub_mat, local_mean_variance);
+            L_mean = local_mean_variance[0];
+            L_variance = local_mean_variance[1];
+            // 到这里我们已经拿到了局部和全局的均值和方差
+            // 我们还缺好三个指标，一个是我们需要制定两个范围，分别对应
+            // 均值和方差的范围，一个是我们需要计算常量，因为我们要使用该常量
+            // 放大原始图像中的低灰度值,自定义范围我们需要从主函数中传入，
+            // 我们先来计算常量吧
+            minMaxLoc(sub_mat, 0, &local_max_value, 0, 0);
+            const_value = global_max_value / local_max_value;
+            // OK没问题，我们继续，我们从主函数中传入对应的区间范围
+            // 我们需要筛选范围
+            if (L_mean >= G_mean * k0 && L_mean <= G_mean * k1 &&
+                L_variance >= G_variance * k2 && L_variance <= G_variance * k3)
+            {
+                // 只有在这个统计范围内我们才去使用常数缩放对应的灰度值
+                // 到此，程序结束
+                temp_mat.at<uchar>(row + half_side_length, col + half_side_length) *= const_value;
+            }
+        }
+    }
+}
+
+void cal_mean_variance(Mat inputImage, double mean_variance[]) 
+{
+    // 我们需要基于直方图去计算统计量
+    double *distribution = getDistribution(inputImage);
+    double mean = 0.0;
+    double variance = 0.0;
+    // 这里注意为什么要乘以分布，因为每个灰度值出现的概率不是均等的，如果是均等
+    // 的我们直接可以除以256即可
+    for (int i = 0; i < 256; i++)
+    {
+        mean += (i * distribution[i]);
+    }
+
+    for (int i = 0; i < 256; i++)
+    {
+        variance += (pow((i - mean), 2) * distribution[i]);
+    }
+    mean_variance[0] = mean;
+    mean_variance[1] = variance;
+}

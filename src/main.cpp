@@ -74,7 +74,8 @@ int main(int argc, char const *argv[])
 
     // 我们想要实现直方图规定化
     Mat inputImage = imread("c:/users/80521/desktop/dark.webp", 0);
-    Mat objectImage = imread("c:/users/80521/desktop/object.webp");
+    Mat objectImage = imread("c:/users/80521/desktop/object.webp", 0);
+    Mat temp = imread("c:/users/80521/desktop/temp.png", 0);
     Mat outputImage;
     // 我去，这里是不是没有定义引用传参，。。。。。。我看下不是这个问题
     // histogram_match(inputImage, objectImage, outputImage);
@@ -119,18 +120,37 @@ int main(int argc, char const *argv[])
 
     // 我们想要实现灰度直方图局部均衡化处理
     // 注意扫描的尺寸为奇数
-    histogramLocalEqualization(inputImage, outputImage, 77);
-
+    // 2个线程， 32秒
+    // 4各线程，18秒
+    // 6个线程，16秒
+    // 8个线程，12秒
+    // 10个线程，12秒
+    // 12个线程， 13秒。
+    // 可以发现并不是倍数减少，应该是有一个线程数上限。
+    // 以上是我在自己的电脑上测试的不同线程数的代码执行描述，可以发现10个线程已经是极限了
+    // 再往上加就会出现时间增加的情况，就是因为CPU的调度极限。
+    // 线程数最好是偶数，因为我们没有对奇数情况做兼容，所以本函数只适用于偶数线程。
+    // 注意我们把线程数量写死了。我们更改下
+    // histogram_local_thread(objectImage, outputImage, 55, THREAD_2);
+    // histogramLocalEqualization(objectImage, outputImage, 55);
+    // histogram_equalization(objectImage, outputImage);
+    // 注意我们可以通过这个范围筛选我们想要更改的区域，一般是筛选出地灰度值低方差的区域
+    // 注意这个范围我们需要不断的测试效果，我们首先可以筛选出我们想要的灰度区间
+    // 如果是低灰度区间，那么第一个参数是0，第二个尽量接近0.1
+    // 然后再去按照第三个和第四个参数去筛选对应的方差范围
+    // 然后再根据扫描尺寸的大小去调节增强的亮度
+    // 我们可以把均衡化，局部操作，和局部统计量三种操作结果对比下
+    double k[4] = {0.0, 0.08, 0.06, 0.19};
+    histogram_equalization(temp, outputImage);
     vector<Mat> multiImage;
-    multiImage.push_back(inputImage);
+    multiImage.push_back(temp);
+    multiImage.push_back(outputImage);
+    histogram_local_thread(temp, outputImage, 3, THREAD_12);
+    multiImage.push_back(outputImage);
+    histogram_local_statistics_thread(temp, outputImage, 3, THREAD_12, k);
     multiImage.push_back(outputImage);
     string str_window = "histogram local equalization";
     multiImshow(str_window, multiImage);
-
-
-
-
-
 
     waitKey(0);
     destroyAllWindows();

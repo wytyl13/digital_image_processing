@@ -2,11 +2,24 @@
 #define MAIN_H_
 
 #include <opencv2/opencv.hpp>
-
-
+#include <thread>
 
 using namespace std;
 using namespace cv;
+
+
+
+enum THREAD_NUMBERS
+{
+    THREAD_2 = 2,
+    THREAD_4 = 4,
+    THREAD_6 = 6,
+    THREAD_8 = 8,
+    THREAD_10 = 10,
+    THREAD_12 = 12,
+};
+
+
 
 /**
  * @Author: weiyutao
@@ -77,8 +90,6 @@ void histogram_match(Mat inputImage, Mat objectImage, Mat &outputImage);
 
 
 
-
-
 /**
  * @Author: weiyutao
  * @Date: 2023-08-30 17:43:01
@@ -89,5 +100,54 @@ void histogram_match(Mat inputImage, Mat objectImage, Mat &outputImage);
  * @Description: 
  */
 void histogramLocalEqualization(Mat inputImage, Mat &outputImage, int kernelSize);
+
+
+
+/**
+ * @Author: weiyutao
+ * @Date: 2023-09-03 22:32:29
+ * @Parameters: inputImage， 输入图像
+ * @Parameters: outputImage ， 输出图像
+ * @Parameters: side_length ， 扫描尺寸，一个奇数矩阵
+ * @Parameters: side_length ， 扫描尺寸，一个奇数矩阵
+ * @Parameters: thread_numbers ，需要开启的线程数，也就是切分原始图像的数量
+ * @Return: 
+ * @Description: 多线程操作灰度直方图自适应。。我们至少需要以下四个参数
+ */
+void histogram_local_thread(Mat inputImage, Mat &outputImage,
+                            int side_length, int thread_numbers);
+
+
+/**
+ * @Author: weiyutao
+ * @Date: 2023-09-04 00:07:50
+ * @Parameters: temp_mat，传入图像，注意这里不需要使用引用地址，因为它本身就是一个地址
+ *          我们对他的所有操作都会影响到原始图像
+ * @Parameters: cols_thread， rows_thread 每一个线程的宽高，注意对应的是原图的宽高
+ * @Parameters: half_side_length， 扫描尺寸的一半
+ * @Parameters: side_length 扫描尺寸
+ * @Return: 
+ * @Description: 现成函数，我们至少需要这么几个参数,我们先来定义，缺什么参数添加什么
+ */
+void thread_function(Mat temp_mat, Mat temp_mat_, int cols_thread, int rows_thread, \
+    int half_side_length, int side_length);
+
+void histogram_local_statistics_thread(Mat inputImage, Mat &outputImage,
+                            int side_length, int thread_numbers, double k[]);
+
+void thread_statistics_function(Mat temp_mat, Mat temp_mat_, int cols_thread, int rows_thread, \
+    int half_side_length, int side_length, double mean_variance[], double global_max_value, double k[]);
+
+
+/**
+ * @Author: weiyutao
+ * @Date: 2023-09-04 22:38:42
+ * @Parameters: inputImage, 输入图像
+ * @Parameters: mean_variance, 传出参数
+ * @Return: null
+ * @Description: 我们使用传出参数来接受返回值吧，我们传递了一个指针，该指针是mean_variance数组的
+ * 首地址
+ */
+void cal_mean_variance(Mat inputImage, double mean_variance[]);
 
 #endif
