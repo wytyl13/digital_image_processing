@@ -19,7 +19,13 @@ enum THREAD_NUMBERS
     THREAD_12 = 12,
 };
 
-
+enum TRANSFORMATION
+{
+    REVERSE, //反转
+    BINARY, // 二值
+    LOGORITHM, // 对数变换
+    GAMA, //伽马变换
+};
 
 /**
  * @Author: weiyutao
@@ -33,7 +39,8 @@ enum THREAD_NUMBERS
  * 是一个地址，我们可以使用改地址索引多个double
  * @Description: 获取灰度图像的分布的函数
  */
-double* getDistribution(Mat inputImage);
+double *
+getDistribution(Mat inputImage);
 
 /**
  * @Author: weiyutao
@@ -149,5 +156,47 @@ void thread_statistics_function(Mat temp_mat, Mat temp_mat_, int cols_thread, in
  * 首地址
  */
 void cal_mean_variance(Mat inputImage, double mean_variance[]);
+
+/**
+ * @Author: weiyutao
+ * @Date: 2023-09-06 01:10:14
+ * @Parameters: 
+ * @Return: 
+ * @Description: 首先实现图像反转
+ */
+void gray_transformation(Mat inputImage, Mat &outputImage, int mode, int threshold_value, int c, double gama_value);
+
+/**
+ * @Author: weiyutao
+ * @Date: 2023-09-06 01:18:55
+ * @Parameters: threshold_value,阈值
+ * @Return: 
+ * @Description: 阈值处理函数,这里为了使用同一个函数去定义不同的常规变换，我们还需要定义
+ * 一个传入参数，我们可以使用枚举类定义该参数，区分不同的变换类型
+ */
+void binary_transformation(Mat inputImage, Mat &outputImage, int threshold_value);
+
+/**
+ * @Author: weiyutao
+ * @Date: 2023-09-06 01:32:41
+ * @Parameters: 
+ * @Return: 
+ * @Description: 我们现在的操作是线性缩放，当然还有非线性缩放的方式。线性缩放的意思是将图像原像素
+ * 点采用线性的方式缩放到8比特图像0-255区间内。
+ */
+void linear_scaling(Mat inputImage, Mat &outputImage);
+
+/**
+ * @Author: weiyutao
+ * @Date: 2023-09-06 02:22:29
+ * @Parameters: inputImage ，输入图像
+ * @Parameters: outputImage，输出图像
+ * @Parameters: bit 比特层
+ * @Return: 
+ * @Description: 比特分层函数
+ */
+void bit_plane(Mat inputImage, Mat &outputImage, int bit);
+
+
 
 #endif

@@ -751,3 +751,116 @@ void cal_mean_variance(Mat inputImage, double mean_variance[])
     mean_variance[0] = mean;
     mean_variance[1] = variance;
 }
+
+void gray_transformation(Mat inputImage, Mat &outputImage, int mode, int threshold_value, int c, double gama) 
+{
+    // 图像反转
+    // 我们可以直接使用Mat实例的广播机制进行数学运算
+    // y = -x + (L - 1)
+    if (mode == REVERSE)
+    {
+        int L = pow(2, 8) - 1;
+        outputImage = -1 * inputImage + (L - 1);
+    }
+
+    // 阈值变换
+    // 我们可以定义下该阈值函数
+    if (mode == BINARY)
+    {
+        binary_transformation(inputImage, outputImage, threshold_value);
+        // 注意这里打印为空，说明变换函数是错误的，
+        // 好了，测试完毕，但是有一个问题就是我们将该图像二值化以后，图像是不能正常展示的，所以我们
+        // 可以定义一个像素缩放函数，该函数可以将图像的像素映射到0-255区间内，无论该图像的灰度值
+        // 是什么区间内，这个函数都可以做到将原始图像的像素值映射到0-255，这个是我们想要达到的效果
+        // 我们的目的是将图像原始像素0,1映射到0-255区间内，映射后的结果是0,255
+    }
+    if (mode == LOGORITHM)
+    {
+        // 如果inputImage的最大灰度值为255，那么执行该操作以后8比特图像将不能存储该结果，所以
+        // 我们要在这之前重新定义一个图像数据类型去接受该结果
+        // 注意我们这里定义了一个inputimage尺寸大小的float64数据类型，他可以存储超过255的图像数据
+        // 而且可以保存浮点数据类型
+        // 这个错误应该是在进行图像广播运算的时候发出的.
+        inputImage.convertTo(outputImage, CV_64F);
+        outputImage += 1;
+        // void log(cv::InputArray src, cv::OutputArray dst)
+        // 这里需要注意的是，灰度变换可能会出现非uchar类型的灰度值，所以我们这里需要进行
+        // 图像类型的转换
+        // 这个错误是图像数据类型出现的错误
+        cv::log(outputImage, outputImage);
+        outputImage *= c;
+        // 将图像数据类型从浮点数类型转换为uchar类型，当然最后还是需要进行线性缩放
+        // 将图像的灰度值映射为0-255， 因为我们后续都是基于8比特图像进行的分析
+        outputImage.convertTo(outputImage, CV_8UC1);
+    }
+    if (mode == GAMA)
+    {
+        // 注意gama的数据类型是double
+        // y = c * x^r
+        inputImage.convertTo(outputImage, CV_64F);
+        // void pow(cv::InputArray src, double power, cv::OutputArray dst)
+        cv::pow(outputImage, gama, outputImage);
+        // 注意还有一个系数c，但是其实我们只需要更换gama值就可以满足我们的变换了。
+        outputImage.convertTo(outputImage, CV_8UC1);
+    }
+    linear_scaling(outputImage, outputImage);
+}
+
+void binary_transformation(Mat inputImage, Mat &outputImage, int threshold_value)
+{
+    uchar *row_mat;
+    // 需要遍历每一个像素点
+    outputImage = inputImage.clone();
+    for (int i = 0; i < inputImage.rows; i++)
+    {
+        row_mat = inputImage.ptr<uchar>(i);
+        for (int j = 0; j < inputImage.cols; j++)
+        {
+            // 根据阈值改变原像素值
+            // 我们可以使用三目运算符处理该值
+            outputImage.at<uchar>(i, j) = (row_mat[j] >= threshold_value) ? 1 : 0;
+        }
+    }
+}
+
+void linear_scaling(Mat inputImage, Mat &outputImage) 
+{
+    // 线性缩放的表达式为
+    // 我们首先需要对图像进行归一化,但是这里注意去均值化好像并不能满足我们的要求，我们的目标是将
+    // 图像映射到0-255，我们首先要做的时将原始图像映射到0-1区间内。简单的去均值化并不能做到这一点
+    // 比如对于二值图像，0,1 -> 0,255
+    // y = (x - min) / max 
+        // = (0 - 0) / 1 = 0
+        // = (1 - 0) / 1 = 1
+    // 这样我们可以首先把原始图像映射到0,1 然后乘以255，可以将原始图像映射到0,255
+    double min_value, max_value;
+    minMaxLoc(inputImage, &min_value, &max_value, 0, 0);
+    outputImage = (inputImage - min_value) / max_value * 255;
+}
+
+void bit_plane(Mat inputImage, Mat &outputImage, int bit) 
+{
+    // 我们首先根据比特数构建灰度值区间范围
+    // 8比特层范围为2^7-2^8-1 = 128, 255
+    int min_value = pow(2, bit - 1);
+    int max_value = pow(2, bit) - 1;
+    // 我们需要循环遍历每一个像素点
+    uchar *row_mat;
+    // uchar gray_value;
+    outputImage = inputImage.clone();
+    for (int i = 0; i < inputImage.rows; i++)
+    {
+        row_mat = inputImage.ptr<uchar>(i);
+        for (int j = 0; j < inputImage.cols; j++)
+        {
+            // 将非区间内的灰度值置为0
+            // 注意这里不能这么定义，因为我们可能会遗漏掉灰度值为0的像素点
+            // 所以我们反着来
+            // 注意这个结果不用做线性缩放
+            // gray_value = row_mat[j];
+            // 注意这里是或不是并
+            outputImage.at<uchar>(i, j) = (row_mat[j] < min_value || \
+                row_mat[j] > max_value) ? 0 : row_mat[j];
+        }
+    }
+}

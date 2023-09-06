@@ -1,7 +1,6 @@
 #include "general.h"
 
 
-
 /**
  * @Author: weiyutao
  * @Date: 2023-08-28 18:27:34
@@ -140,17 +139,50 @@ int main(int argc, char const *argv[])
     // 然后再去按照第三个和第四个参数去筛选对应的方差范围
     // 然后再根据扫描尺寸的大小去调节增强的亮度
     // 我们可以把均衡化，局部操作，和局部统计量三种操作结果对比下
-    double k[4] = {0.0, 0.08, 0.06, 0.19};
-    histogram_equalization(temp, outputImage);
+    // double k[4] = {0.0, 0.08, 0.06, 0.19};
+    // histogram_equalization(temp, outputImage);
+    // vector<Mat> multiImage;
+    // multiImage.push_back(temp);
+    // multiImage.push_back(outputImage);
+    // histogram_local_thread(temp, outputImage, 3, THREAD_12);
+    // multiImage.push_back(outputImage);
+    // histogram_local_statistics_thread(temp, outputImage, 3, THREAD_12, k);
+    // multiImage.push_back(outputImage);
+    // string str_window = "histogram local equalization";
+    // multiImshow(str_window, multiImage);
+    // 我们分别测试下反转、二值、对数和伽马变换
+    // gray_transformation(inputImage, outputImage, REVERSE, 0, 0, 0);
     vector<Mat> multiImage;
-    multiImage.push_back(temp);
+    multiImage.push_back(inputImage);
+    bit_plane(inputImage, outputImage, 1);
     multiImage.push_back(outputImage);
-    histogram_local_thread(temp, outputImage, 3, THREAD_12);
+    bit_plane(inputImage, outputImage, 2);
     multiImage.push_back(outputImage);
-    histogram_local_statistics_thread(temp, outputImage, 3, THREAD_12, k);
+    bit_plane(inputImage, outputImage, 3);
     multiImage.push_back(outputImage);
+    bit_plane(inputImage, outputImage, 4);
+    multiImage.push_back(outputImage);
+    bit_plane(inputImage, outputImage, 5);
+    multiImage.push_back(outputImage);
+    bit_plane(inputImage, outputImage, 6);
+    multiImage.push_back(outputImage);
+    bit_plane(inputImage, outputImage, 7);
+    multiImage.push_back(outputImage);
+    bit_plane(inputImage, outputImage, 8);
+    multiImage.push_back(outputImage);
+    // gray_transformation(inputImage, outputImage, BINARY, 120, 0, 0);
+    // multiImage.push_back(outputImage);
+    // gray_transformation(inputImage, outputImage, LOGORITHM, 0, 1, 0);
+    // multiImage.push_back(outputImage);
+    // gray_transformation(inputImage, outputImage, GAMA, 0, 0, 0.7);
+    // multiImage.push_back(outputImage);
+    // gray_transformation(inputImage, outputImage, GAMA, 0, 0, 0.5);
+    // multiImage.push_back(outputImage);
+    // gray_transformation(inputImage, outputImage, GAMA, 0, 0, 0.3);
+    // multiImage.push_back(outputImage);
     string str_window = "histogram local equalization";
     multiImshow(str_window, multiImage);
+
 
     waitKey(0);
     destroyAllWindows();
