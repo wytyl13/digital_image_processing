@@ -3,11 +3,10 @@
 
 #include <opencv2/opencv.hpp>
 #include <thread>
+#include <random>
 
 using namespace std;
 using namespace cv;
-
-
 
 enum THREAD_NUMBERS
 {
@@ -26,6 +25,8 @@ enum TRANSFORMATION
     LOGORITHM, // 对数变换
     GAMA, //伽马变换
 };
+
+extern cv::Mat_<uchar> MEAN_FILTER;
 
 /**
  * @Author: weiyutao
@@ -71,8 +72,8 @@ getDistribution(Mat inputImage);
  * 
  */
 void histogram_equalization(Mat inputImage, Mat &outputImage);
-void multiImshow(string str, vector<Mat> vectorImage);
 
+void multiImshow(string str, vector<Mat> vectorImage);
 
 /**
  * @Author: weiyutao
@@ -94,9 +95,6 @@ void histogram_match(Mat inputImage, Mat objectImage, Mat &outputImage);
  */
 void histogram_match(Mat inputImage, Mat objectImage, Mat &outputImage);
 
-
-
-
 /**
  * @Author: weiyutao
  * @Date: 2023-08-30 17:43:01
@@ -107,8 +105,6 @@ void histogram_match(Mat inputImage, Mat objectImage, Mat &outputImage);
  * @Description: 
  */
 void histogramLocalEqualization(Mat inputImage, Mat &outputImage, int kernelSize);
-
-
 
 /**
  * @Author: weiyutao
@@ -123,7 +119,6 @@ void histogramLocalEqualization(Mat inputImage, Mat &outputImage, int kernelSize
  */
 void histogram_local_thread(Mat inputImage, Mat &outputImage,
                             int side_length, int thread_numbers);
-
 
 /**
  * @Author: weiyutao
@@ -144,7 +139,6 @@ void histogram_local_statistics_thread(Mat inputImage, Mat &outputImage,
 
 void thread_statistics_function(Mat temp_mat, Mat temp_mat_, int cols_thread, int rows_thread, \
     int half_side_length, int side_length, double mean_variance[], double global_max_value, double k[]);
-
 
 /**
  * @Author: weiyutao
@@ -198,5 +192,22 @@ void linear_scaling(Mat inputImage, Mat &outputImage);
 void bit_plane(Mat inputImage, Mat &outputImage, int bit);
 
 
+// -------------------------------------------------------------
+void spatial_filter_thread(Mat inputImage, Mat &outputImage,
+                            const cv::Mat filter, int thread_numbers);
+
+void mean_filter_function(Mat temp_mat, Mat temp_mat_, \
+    const cv::Mat filter, int cols_thread, cv::Mat result, \
+    int rows_thread, int half_side_length, int side_length, \
+    const int total_pixel_filter);
+cv::Mat get_mean_filter(const int kernel_size, int weight_flag = 0);
+void guassian_noise(cv::Mat input_image, cv::Mat &output_image, const double mean, const double std);
+void saltPepper(cv::Mat input_image, cv::Mat &output_image, const int noise_size, int count);
+void median_filter_thread(Mat inputImage, Mat &outputImage,
+                        int side_length, int thread_numbers);
+void median_filter_function(Mat temp_mat, Mat temp_mat_, \
+    int cols_thread, cv::Mat result, \
+    int rows_thread, int half_side_length, int side_length);
+// -------------------------------------------------------------
 
 #endif

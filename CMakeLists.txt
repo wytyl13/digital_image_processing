@@ -12,7 +12,7 @@ aux_source_directory(./src SRC_DIR_VAR)
 add_executable(${PROJECT_NAME} ${SRC_DIR_VAR})
 
 
-set(OpenCV_DIR D:\\development_app2\\opencv\\build\\install)
+set(OpenCV_DIR C:\\Users\\weiyutao\\opt\\opencv\\build\\install)
 find_package(OpenCV REQUIRED)
 
 if((OpenCV_FOUND))

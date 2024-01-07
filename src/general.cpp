@@ -1,5 +1,6 @@
 #include "general.h"
 
+cv::Mat_<uchar> MEAN_FILTER = (cv::Mat_<uchar>(3, 3) << 1, 1, 1, 1, 1, 1, 1, 1, 1);
 double *getDistribution(Mat inputImage) 
 {
     // 首先我们需要遍历输入图像中的每一个像素值
@@ -179,8 +180,6 @@ void multiImshow(string str, vector<Mat> vectorImage)
     }
     imshow(str, dstImage);
 }
-
-
 
 double* getCumulative(Mat inputImage) 
 {
@@ -552,8 +551,6 @@ void histogram_local_thread(Mat inputImage, Mat &outputImage,
     outputImage = outputImage(Rect(half_side_length, half_side_length, cols, rows));
 }
 
-
-
 void thread_function(Mat temp_mat, Mat temp_mat_, int cols_thread, int rows_thread, \
     int half_side_length, int side_length) 
 {
@@ -587,9 +584,6 @@ void thread_function(Mat temp_mat, Mat temp_mat_, int cols_thread, int rows_thre
         }
     }
 }
-
-
-
 
 void histogram_local_statistics_thread(Mat inputImage, Mat &outputImage,
                             int side_length, int thread_numbers, double k[]) 
@@ -682,9 +676,6 @@ void histogram_local_statistics_thread(Mat inputImage, Mat &outputImage,
     cout << end - start << endl;
     outputImage = outputImage(Rect(half_side_length, half_side_length, cols, rows));
 }
-
-
-
 
 void thread_statistics_function(Mat temp_mat, Mat temp_mat_, int cols_thread, int rows_thread, \
     int half_side_length, int side_length, double mean_variance[], double global_max_value, double k[]) 
@@ -864,3 +855,291 @@ void bit_plane(Mat inputImage, Mat &outputImage, int bit)
         }
     }
 }
+
+// ---------------------------------------------------------------------------------
+void spatial_filter_thread(Mat inputImage, Mat &outputImage,
+                            const cv::Mat filter, int thread_numbers) 
+{
+    int side_length = filter.cols;
+    int total_pixel_filter = cv::sum(filter)[0];
+    time_t start, end;
+    start = time(NULL);
+
+    int cols_thread_numbers = (thread_numbers / 2 > 5) ? 4 : (thread_numbers / 2);
+    int rows_thread_numbers = thread_numbers / cols_thread_numbers;
+
+    int rows = inputImage.rows;
+    int cols = inputImage.cols;
+
+    int cols_mod = cols % cols_thread_numbers;
+    int rows_mod = rows % rows_thread_numbers;
+
+    int cols_thread = cols / cols_thread_numbers + cols_mod;
+    int rows_thread = rows / rows_thread_numbers + rows_mod;
+
+    bool left_upper, right_upper, left_bottom, right_bottom;
+    int left_upper_index = 0;
+    int right_upper_index = cols_thread - 1;
+    int left_bottom_index = thread_numbers - cols_thread;
+    int right_bottom_index = thread_numbers - 1;
+    bool up, bottom, left, right;
+    int half_side_length = side_length / 2;
+    int width, height;
+
+    int padding_cols = cols + 2 * half_side_length;
+    int padding_rows = rows + 2 * half_side_length;
+    Mat padding_mat = Mat::zeros(Size(padding_cols, padding_rows), CV_8UC1);
+    Mat roi = padding_mat(Rect(half_side_length, half_side_length, cols, rows));
+    inputImage.copyTo(roi);
+
+    vector<thread *> thread_vectors;
+    outputImage = padding_mat.clone();
+    cv::Mat result;
+    for (int i = 0, x = 0, y = 0; i < thread_numbers; i++, x += cols_thread)
+    {
+
+        left_upper = (i == left_upper_index);
+        right_upper = (i == right_upper_index);
+        left_bottom = (i == left_bottom_index);
+        right_bottom = (i == right_bottom_index);
+        left = (i % cols_thread_numbers == 0);
+        up = (i >= left_upper_index && i <= right_upper_index);
+        bottom = (i >= left_bottom_index && i <= right_bottom_index);
+        right = (i % cols_thread_numbers == 1);
+        if (left && !left_upper)
+        {
+            x = 0;
+            y += rows_thread;
+        }
+
+        if (right)
+        {
+            cols_thread = cols - (cols / cols_thread_numbers + cols_mod) * (cols_thread_numbers - 1);
+        }
+        if (bottom)
+        {
+            rows_thread = rows - (rows / rows_thread_numbers + rows_mod) * (rows_thread_numbers - 1);
+        }
+        width = cols_thread + 2 * half_side_length;
+        height = rows_thread + 2 * half_side_length;
+
+        Mat temp_mat = outputImage(Rect(x, y, width, height));
+        Mat temp_mat_ = padding_mat(Rect(x, y, width, height));
+
+        thread *thread_pointer = new thread(mean_filter_function, temp_mat, temp_mat_, \
+            filter, cols_thread, result, rows_thread, half_side_length, side_length, total_pixel_filter);
+        thread_vectors.push_back(thread_pointer);
+    }
+
+    for (int i = 0; i < thread_vectors.size(); i++)
+    {
+        thread *thread_i = thread_vectors[i];
+        if (thread_i != NULL)
+        {
+            thread_i->join();
+            delete thread_i;
+            thread_i = NULL;
+        }
+    }
+    end = time(NULL);
+    cout << end - start << endl;
+    outputImage = outputImage(Rect(half_side_length, half_side_length, cols, rows));
+}
+
+void mean_filter_function(Mat temp_mat, Mat temp_mat_, \
+    const cv::Mat filter, int cols_thread, cv::Mat result, \
+    int rows_thread, int half_side_length, int side_length, \
+    const int total_pixel_filter) 
+{
+    for (int row = 0; row < rows_thread; row++)
+    {
+        for (int col = 0; col < cols_thread; col++)
+        {
+            // 扫描到的子图
+            Mat sub_mat = temp_mat_(Rect(col, row, side_length, side_length));
+            cv::multiply(sub_mat, filter, result);
+            temp_mat.at<uchar>(row + half_side_length, col + half_side_length) = \
+            (uchar)(cv::sum(result)[0] / total_pixel_filter);
+        }
+    }
+}
+
+void median_filter_function(Mat temp_mat, Mat temp_mat_, \
+    int cols_thread, cv::Mat result, \
+    int rows_thread, int half_side_length, int side_length) 
+{
+    for (int row = 0; row < rows_thread; row++)
+    {
+        for (int col = 0; col < cols_thread; col++)
+        {
+            // 扫描到的子图
+            Mat sub_mat = temp_mat_(Rect(col, row, side_length, side_length));
+            // 找到中值
+            // Mat --> vector.
+            std::vector<uchar> sub_mat_vector = std::vector<uchar>(sub_mat.begin<uchar>(), sub_mat.end<uchar>());
+            std::sort(sub_mat_vector.begin(), sub_mat_vector.end());
+
+            temp_mat.at<uchar>(row + half_side_length, col + half_side_length) = \
+            (uchar)(sub_mat_vector[side_length * side_length / 2]);
+        }
+    }
+}
+
+void median_filter_thread(Mat inputImage, Mat &outputImage,
+                        int side_length, int thread_numbers) 
+{
+    time_t start, end;
+    start = time(NULL);
+
+    int cols_thread_numbers = (thread_numbers / 2 > 5) ? 4 : (thread_numbers / 2);
+    int rows_thread_numbers = thread_numbers / cols_thread_numbers;
+
+    int rows = inputImage.rows;
+    int cols = inputImage.cols;
+
+    int cols_mod = cols % cols_thread_numbers;
+    int rows_mod = rows % rows_thread_numbers;
+
+    int cols_thread = cols / cols_thread_numbers + cols_mod;
+    int rows_thread = rows / rows_thread_numbers + rows_mod;
+
+    bool left_upper, right_upper, left_bottom, right_bottom;
+    int left_upper_index = 0;
+    int right_upper_index = cols_thread - 1;
+    int left_bottom_index = thread_numbers - cols_thread;
+    int right_bottom_index = thread_numbers - 1;
+    bool up, bottom, left, right;
+    int half_side_length = side_length / 2;
+    int width, height;
+
+    int padding_cols = cols + 2 * half_side_length;
+    int padding_rows = rows + 2 * half_side_length;
+    Mat padding_mat = Mat::zeros(Size(padding_cols, padding_rows), CV_8UC1);
+    Mat roi = padding_mat(Rect(half_side_length, half_side_length, cols, rows));
+    inputImage.copyTo(roi);
+
+    vector<thread *> thread_vectors;
+    outputImage = padding_mat.clone();
+    cv::Mat result;
+    for (int i = 0, x = 0, y = 0; i < thread_numbers; i++, x += cols_thread)
+    {
+
+        left_upper = (i == left_upper_index);
+        right_upper = (i == right_upper_index);
+        left_bottom = (i == left_bottom_index);
+        right_bottom = (i == right_bottom_index);
+        left = (i % cols_thread_numbers == 0);
+        up = (i >= left_upper_index && i <= right_upper_index);
+        bottom = (i >= left_bottom_index && i <= right_bottom_index);
+        right = (i % cols_thread_numbers == 1);
+        if (left && !left_upper)
+        {
+            x = 0;
+            y += rows_thread;
+        }
+
+        if (right)
+        {
+            cols_thread = cols - (cols / cols_thread_numbers + cols_mod) * (cols_thread_numbers - 1);
+        }
+        if (bottom)
+        {
+            rows_thread = rows - (rows / rows_thread_numbers + rows_mod) * (rows_thread_numbers - 1);
+        }
+        width = cols_thread + 2 * half_side_length;
+        height = rows_thread + 2 * half_side_length;
+
+        Mat temp_mat = outputImage(Rect(x, y, width, height));
+        Mat temp_mat_ = padding_mat(Rect(x, y, width, height));
+
+        thread *thread_pointer = new thread(median_filter_function, temp_mat, temp_mat_, \
+            cols_thread, result, rows_thread, half_side_length, side_length);
+        thread_vectors.push_back(thread_pointer);
+    }
+
+    for (int i = 0; i < thread_vectors.size(); i++)
+    {
+        thread *thread_i = thread_vectors[i];
+        if (thread_i != NULL)
+        {
+            thread_i->join();
+            delete thread_i;
+            thread_i = NULL;
+        }
+    }
+    end = time(NULL);
+    cout << end - start << endl;
+    outputImage = outputImage(Rect(half_side_length, half_side_length, cols, rows));
+}
+
+cv::Mat get_mean_filter(const int kernel_size, int weight_flag) 
+{
+    cv::Mat result = cv::Mat::ones(kernel_size, kernel_size, CV_8UC1);
+
+    /* 
+    1 2 1
+    2 4 2
+    1 2 1
+
+    1 1 1 1 1
+    1 1 2 1 1
+    1 2 4 2 1
+    1 1 2 1 1
+    1 1 1 1 1
+     */
+    if (weight_flag)
+    {
+        for (size_t i = 0; i < kernel_size; i++)
+        {
+            for (size_t j = 0; j < kernel_size; j++)
+            {
+                if (i == (kernel_size / 2) && j == (kernel_size / 2))
+                {
+                    result.at<uchar>(i, j) = 4;
+                } else if (i == (kernel_size / 2 + 1) && j == (kernel_size / 2))
+                {
+                    result.at<uchar>(i, j) = 2;
+                } else if (i == (kernel_size / 2 - 1) && j == (kernel_size / 2))
+                {
+                    result.at<uchar>(i, j) = 2;
+                } else if (i == (kernel_size / 2) && j == (kernel_size / 2 - 1))
+                {
+                    result.at<uchar>(i, j) = 2;
+                } else if (i == (kernel_size / 2) && j == (kernel_size / 2 + 1))
+                {
+                    result.at<uchar>(i, j) = 2;
+                }
+            }
+        }
+    }
+    return result;
+}
+
+void guassian_noise(cv::Mat input_image, cv::Mat &output_image, const double mean, const double std) 
+{
+    output_image = input_image.clone();
+    cv::Mat noise = cv::Mat(output_image.rows, output_image.cols, CV_8UC1);
+    cv::randn(noise, mean, std);
+    output_image += noise;
+}
+
+void saltPepper(cv::Mat input_image, cv::Mat &output_image, const int noise_size, int count) 
+{
+    output_image = input_image.clone();
+    int noise_type;
+    int x, y;
+    while (count--)
+    {
+        x = rand() % (output_image.rows - noise_size + 1);
+        y = rand() % (output_image.cols - noise_size + 1);
+        noise_type = rand() % 2;
+        for (size_t i = 0; i < noise_size; i++)
+        {
+            for (size_t j = 0; j < noise_size; j++)
+            {
+                output_image.at<uchar>(x + i, y + j) = noise_type ? 255 : 0;
+            }
+        }
+    }
+}
+// ---------------------------------------------------------------------------------
