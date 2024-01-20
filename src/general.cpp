@@ -1,7 +1,10 @@
 #include "general.h"
 
 cv::Mat_<uchar> MEAN_FILTER = (cv::Mat_<uchar>(3, 3) << 1, 1, 1, 1, 1, 1, 1, 1, 1);
-double *getDistribution(Mat inputImage) 
+const cv::Mat_<int> General::LAPULASI_FILTER_1 = (cv::Mat_<int>(3, 3) << 0, 1, 0, 1, -4, 1, 0, 1, 0);
+const cv::Mat_<int> General::LAPULASI_FILTER_2 = (cv::Mat_<int>(3, 3) << 1, 1, 1, 1, -8, 1, 1, 1, 1);
+
+double *General::getDistribution(Mat inputImage) 
 {
     // 首先我们需要遍历输入图像中的每一个像素值
 
@@ -58,7 +61,7 @@ double *getDistribution(Mat inputImage)
     return distribution;
 }
 
-void histogram_equalization(Mat inputImage, Mat &outputImage) 
+void General::histogram_equalization(Mat inputImage, Mat &outputImage) 
 {
 
     // 首先获取分布
@@ -103,7 +106,7 @@ void histogram_equalization(Mat inputImage, Mat &outputImage)
     }
 }
 
-void multiImshow(string str, vector<Mat> vectorImage) 
+void General::multiImshow(string str, vector<Mat> vectorImage) 
 {
     int numImage = (int)vectorImage.size();
     int w, h; // w means the image numbers for row, h means the image numbers for columns.
@@ -181,7 +184,7 @@ void multiImshow(string str, vector<Mat> vectorImage)
     imshow(str, dstImage);
 }
 
-double* getCumulative(Mat inputImage) 
+double* General::getCumulative(Mat inputImage) 
 {
     double *cumulativeDistribution;
     cumulativeDistribution = (double *)malloc(sizeof(double) * 256);
@@ -200,7 +203,7 @@ double* getCumulative(Mat inputImage)
     return cumulativeDistribution;
 }
 
-void histogram_match(Mat inputImage, Mat objectImage, Mat &outputImage) 
+void General::histogram_match(Mat inputImage, Mat objectImage, Mat &outputImage) 
 {
     // 我们刚才分析过了
     // 1 获取输入图像和给定分布的累计概率分布
@@ -260,7 +263,7 @@ void histogram_match(Mat inputImage, Mat objectImage, Mat &outputImage)
     LUT(inputImage, mapping, outputImage);
 }
 
-void histogramLocalEqualization(Mat inputImage, Mat &outputImage, int kernelSize) 
+void General::histogramLocalEqualization(Mat inputImage, Mat &outputImage, int kernelSize) 
 {
     // 刚才我们已经分析了扫描的操作
     // 1 扫描固定区域，并且计算扫描区域的累计概率分布
@@ -326,7 +329,7 @@ void histogramLocalEqualization(Mat inputImage, Mat &outputImage, int kernelSize
     printf("%ld", (end - start));
 }
 
-void histogram_local_thread(Mat inputImage, Mat &outputImage,
+void General::histogram_local_thread(Mat inputImage, Mat &outputImage,
                             int side_length, int thread_numbers) 
 {
 
@@ -514,7 +517,7 @@ void histogram_local_thread(Mat inputImage, Mat &outputImage,
         // 下面我们来定义该线程函数
         // 我们首先可以确定到这个函数这块都是正确的，因为我们
         // 刚才测试了每一个temp_mat都是正常的
-        thread *thread_pointer = new thread(thread_function, temp_mat, temp_mat_, \
+        thread *thread_pointer = new thread(&General::thread_function, this, temp_mat, temp_mat_, \
             cols_thread, rows_thread, half_side_length, side_length);
         // 主线程在创建完每一个子线程以后把该线程放在容器中
         thread_vectors.push_back(thread_pointer);
@@ -546,12 +549,11 @@ void histogram_local_thread(Mat inputImage, Mat &outputImage,
     }
     // HAOLE，测试下
     end = time(NULL);
-    cout << end - start << endl;
+    std::cout << end - start << std::endl;
     // 注意这里我们需要排除outputimage的padding。
     outputImage = outputImage(Rect(half_side_length, half_side_length, cols, rows));
 }
-
-void thread_function(Mat temp_mat, Mat temp_mat_, int cols_thread, int rows_thread, \
+void General::thread_function(Mat temp_mat, Mat temp_mat_, int cols_thread, int rows_thread, \
     int half_side_length, int side_length) 
 {
     // 注意这里的循环次数,循环次数还是3，在刚才那个案例中，其实就是
@@ -585,7 +587,7 @@ void thread_function(Mat temp_mat, Mat temp_mat_, int cols_thread, int rows_thre
     }
 }
 
-void histogram_local_statistics_thread(Mat inputImage, Mat &outputImage,
+void General::histogram_local_statistics_thread(Mat inputImage, Mat &outputImage,
                             int side_length, int thread_numbers, double k[]) 
 {
 
@@ -656,7 +658,7 @@ void histogram_local_statistics_thread(Mat inputImage, Mat &outputImage,
         Mat temp_mat = outputImage(Rect(x, y, width, height));
         Mat temp_mat_ = padding_mat(Rect(x, y, width, height));
         // 注意这个函数没有更换过来
-        thread *thread_pointer = new thread(thread_statistics_function, temp_mat, temp_mat_, \
+        thread *thread_pointer = new thread(&General::thread_statistics_function, this, temp_mat, temp_mat_, \
             cols_thread, rows_thread, half_side_length, side_length, mean_variance, global_max_value, k);
         thread_vectors.push_back(thread_pointer);
     }
@@ -673,11 +675,11 @@ void histogram_local_statistics_thread(Mat inputImage, Mat &outputImage,
     }
     // HAOLE，测试下
     end = time(NULL);
-    cout << end - start << endl;
+    std::cout << end - start << std::endl;
     outputImage = outputImage(Rect(half_side_length, half_side_length, cols, rows));
 }
 
-void thread_statistics_function(Mat temp_mat, Mat temp_mat_, int cols_thread, int rows_thread, \
+void General::thread_statistics_function(Mat temp_mat, Mat temp_mat_, int cols_thread, int rows_thread, \
     int half_side_length, int side_length, double mean_variance[], double global_max_value, double k[]) 
 {
     // 首先，我们所有的工作都是在线程函数中进行的
@@ -722,7 +724,7 @@ void thread_statistics_function(Mat temp_mat, Mat temp_mat_, int cols_thread, in
     }
 }
 
-void cal_mean_variance(Mat inputImage, double mean_variance[]) 
+void General::cal_mean_variance(Mat inputImage, double mean_variance[]) 
 {
     // 我们需要基于直方图去计算统计量
     double *distribution = getDistribution(inputImage);
@@ -743,7 +745,7 @@ void cal_mean_variance(Mat inputImage, double mean_variance[])
     mean_variance[1] = variance;
 }
 
-void gray_transformation(Mat inputImage, Mat &outputImage, int mode, int threshold_value, int c, double gama) 
+void General::gray_transformation(Mat inputImage, Mat &outputImage, int mode, int threshold_value, int c, double gama) 
 {
     // 图像反转
     // 我们可以直接使用Mat实例的广播机制进行数学运算
@@ -797,7 +799,7 @@ void gray_transformation(Mat inputImage, Mat &outputImage, int mode, int thresho
     linear_scaling(outputImage, outputImage);
 }
 
-void binary_transformation(Mat inputImage, Mat &outputImage, int threshold_value)
+void General::binary_transformation(Mat inputImage, Mat &outputImage, int threshold_value)
 {
     uchar *row_mat;
     // 需要遍历每一个像素点
@@ -814,7 +816,7 @@ void binary_transformation(Mat inputImage, Mat &outputImage, int threshold_value
     }
 }
 
-void linear_scaling(Mat inputImage, Mat &outputImage) 
+void General::linear_scaling(Mat inputImage, Mat &outputImage) 
 {
     // 线性缩放的表达式为
     // 我们首先需要对图像进行归一化,但是这里注意去均值化好像并不能满足我们的要求，我们的目标是将
@@ -829,7 +831,7 @@ void linear_scaling(Mat inputImage, Mat &outputImage)
     outputImage = (inputImage - min_value) / max_value * 255;
 }
 
-void bit_plane(Mat inputImage, Mat &outputImage, int bit) 
+void General::bit_plane(Mat inputImage, Mat &outputImage, int bit) 
 {
     // 我们首先根据比特数构建灰度值区间范围
     // 8比特层范围为2^7-2^8-1 = 128, 255
@@ -857,7 +859,8 @@ void bit_plane(Mat inputImage, Mat &outputImage, int bit)
 }
 
 // ---------------------------------------------------------------------------------
-void spatial_filter_thread(Mat inputImage, Mat &outputImage,
+
+void General::spatial_filter_thread(Mat inputImage, Mat &outputImage,
                             const cv::Mat filter, int thread_numbers) 
 {
     int side_length = filter.cols;
@@ -926,7 +929,7 @@ void spatial_filter_thread(Mat inputImage, Mat &outputImage,
         Mat temp_mat = outputImage(Rect(x, y, width, height));
         Mat temp_mat_ = padding_mat(Rect(x, y, width, height));
 
-        thread *thread_pointer = new thread(mean_filter_function, temp_mat, temp_mat_, \
+        thread *thread_pointer = new thread(&General::mean_filter_function, this, temp_mat, temp_mat_, \
             filter, cols_thread, result, rows_thread, half_side_length, side_length, total_pixel_filter);
         thread_vectors.push_back(thread_pointer);
     }
@@ -942,11 +945,11 @@ void spatial_filter_thread(Mat inputImage, Mat &outputImage,
         }
     }
     end = time(NULL);
-    cout << end - start << endl;
+    std::cout << end - start << endl;
     outputImage = outputImage(Rect(half_side_length, half_side_length, cols, rows));
 }
 
-void mean_filter_function(Mat temp_mat, Mat temp_mat_, \
+void General::mean_filter_function(Mat temp_mat, Mat temp_mat_, \
     const cv::Mat filter, int cols_thread, cv::Mat result, \
     int rows_thread, int half_side_length, int side_length, \
     const int total_pixel_filter) 
@@ -964,7 +967,7 @@ void mean_filter_function(Mat temp_mat, Mat temp_mat_, \
     }
 }
 
-void median_filter_function(Mat temp_mat, Mat temp_mat_, \
+void General::median_filter_function(Mat temp_mat, Mat temp_mat_, \
     int cols_thread, cv::Mat result, \
     int rows_thread, int half_side_length, int side_length) 
 {
@@ -985,7 +988,7 @@ void median_filter_function(Mat temp_mat, Mat temp_mat_, \
     }
 }
 
-void median_filter_thread(Mat inputImage, Mat &outputImage,
+void General::median_filter_thread(Mat inputImage, Mat &outputImage,
                         int side_length, int thread_numbers) 
 {
     time_t start, end;
@@ -1052,7 +1055,7 @@ void median_filter_thread(Mat inputImage, Mat &outputImage,
         Mat temp_mat = outputImage(Rect(x, y, width, height));
         Mat temp_mat_ = padding_mat(Rect(x, y, width, height));
 
-        thread *thread_pointer = new thread(median_filter_function, temp_mat, temp_mat_, \
+        thread *thread_pointer = new thread(&General::median_filter_function, this, temp_mat, temp_mat_, \
             cols_thread, result, rows_thread, half_side_length, side_length);
         thread_vectors.push_back(thread_pointer);
     }
@@ -1068,11 +1071,11 @@ void median_filter_thread(Mat inputImage, Mat &outputImage,
         }
     }
     end = time(NULL);
-    cout << end - start << endl;
+    std::cout << end - start << std::endl;
     outputImage = outputImage(Rect(half_side_length, half_side_length, cols, rows));
 }
 
-cv::Mat get_mean_filter(const int kernel_size, int weight_flag) 
+cv::Mat General::get_mean_filter(const int kernel_size, int weight_flag) 
 {
     cv::Mat result = cv::Mat::ones(kernel_size, kernel_size, CV_8UC1);
 
@@ -1115,7 +1118,7 @@ cv::Mat get_mean_filter(const int kernel_size, int weight_flag)
     return result;
 }
 
-void guassian_noise(cv::Mat input_image, cv::Mat &output_image, const double mean, const double std) 
+void General::guassian_noise(cv::Mat input_image, cv::Mat &output_image, const double mean, const double std) 
 {
     output_image = input_image.clone();
     cv::Mat noise = cv::Mat(output_image.rows, output_image.cols, CV_8UC1);
@@ -1123,7 +1126,7 @@ void guassian_noise(cv::Mat input_image, cv::Mat &output_image, const double mea
     output_image += noise;
 }
 
-void saltPepper(cv::Mat input_image, cv::Mat &output_image, const int noise_size, int count) 
+void General::saltPepper(cv::Mat input_image, cv::Mat &output_image, const int noise_size, int count) 
 {
     output_image = input_image.clone();
     int noise_type;
@@ -1141,5 +1144,119 @@ void saltPepper(cv::Mat input_image, cv::Mat &output_image, const int noise_size
             }
         }
     }
+}
+
+// ---------------------------------------------------------------------------------
+void General::general_filter_function(Mat temp_mat, Mat temp_mat_, \
+    const cv::Mat filter, int cols_thread, \
+    int rows_thread, int half_side_length, int side_length, \
+    const int total_pixel_filter) 
+{
+    cv::Mat_<double> result_;
+    for (int row = 0; row < rows_thread; row++)
+    {
+        for (int col = 0; col < cols_thread; col++)
+        {
+            // 扫描到的子图
+            Mat sub_mat = temp_mat_(Rect(col, row, side_length, side_length));
+            cv::multiply(sub_mat, filter, result_);
+            temp_mat.at<double>(row + half_side_length, col + half_side_length) = cv::sum(result_)[0];
+        }
+    }
+}
+
+void General::general_filter_thread(Mat inputImage, Mat &outputImage,
+                            const cv::Mat filter, int thread_numbers) 
+{
+    int side_length = filter.cols;
+    int total_pixel_filter = cv::sum(filter)[0];
+    time_t start, end;
+    start = time(NULL);
+
+    int cols_thread_numbers = (thread_numbers / 2 > 5) ? 4 : (thread_numbers / 2);
+    int rows_thread_numbers = thread_numbers / cols_thread_numbers;
+
+    int rows = inputImage.rows;
+    int cols = inputImage.cols;
+
+    int cols_mod = cols % cols_thread_numbers;
+    int rows_mod = rows % rows_thread_numbers;
+
+    int cols_thread = cols / cols_thread_numbers + cols_mod;
+    int rows_thread = rows / rows_thread_numbers + rows_mod;
+
+    bool left_upper, right_upper, left_bottom, right_bottom;
+    int left_upper_index = 0;
+    int right_upper_index = cols_thread - 1;
+    int left_bottom_index = thread_numbers - cols_thread;
+    int right_bottom_index = thread_numbers - 1;
+    bool up, bottom, left, right;
+    int half_side_length = side_length / 2;
+    int width, height;
+
+    int padding_cols = cols + 2 * half_side_length;
+    int padding_rows = rows + 2 * half_side_length;
+    Mat padding_mat = Mat::zeros(Size(padding_cols, padding_rows), CV_64FC1);
+    Mat roi = padding_mat(Rect(half_side_length, half_side_length, cols, rows));
+    cv::Mat input_image_double;
+    inputImage.convertTo(input_image_double, CV_64FC1);
+    input_image_double.copyTo(roi);
+
+    vector<thread *> thread_vectors;
+    outputImage = padding_mat.clone();
+    for (int i = 0, x = 0, y = 0; i < thread_numbers; i++, x += cols_thread)
+    {
+
+        left_upper = (i == left_upper_index);
+        right_upper = (i == right_upper_index);
+        left_bottom = (i == left_bottom_index);
+        right_bottom = (i == right_bottom_index);
+        left = (i % cols_thread_numbers == 0);
+        up = (i >= left_upper_index && i <= right_upper_index);
+        bottom = (i >= left_bottom_index && i <= right_bottom_index);
+        right = (i % cols_thread_numbers == 1);
+        if (left && !left_upper)
+        {
+            x = 0;
+            y += rows_thread;
+        }
+
+        if (right)
+        {
+            cols_thread = cols - (cols / cols_thread_numbers + cols_mod) * (cols_thread_numbers - 1);
+        }
+        if (bottom)
+        {
+            rows_thread = rows - (rows / rows_thread_numbers + rows_mod) * (rows_thread_numbers - 1);
+        }
+        width = cols_thread + 2 * half_side_length;
+        height = rows_thread + 2 * half_side_length;
+
+        Mat temp_mat = outputImage(Rect(x, y, width, height));
+        Mat temp_mat_ = padding_mat(Rect(x, y, width, height));
+        cv::Mat_<double> result;
+        thread *thread_pointer = new thread(&General::general_filter_function, this, temp_mat, temp_mat_, \
+            filter, cols_thread, rows_thread, half_side_length, side_length, total_pixel_filter);
+        thread_vectors.push_back(thread_pointer);
+    }
+
+    for (int i = 0; i < thread_vectors.size(); i++)
+    {
+        thread *thread_i = thread_vectors[i];
+        if (thread_i != NULL)
+        {
+            thread_i->join();
+            delete thread_i;
+            thread_i = NULL;
+        }
+    }
+    end = time(NULL);
+    std::cout << end - start << std::endl;
+    outputImage = outputImage(Rect(half_side_length, half_side_length, cols, rows));
+
+    // cv::imwrite("c:/users/weiyutao/desktop/enhancement.png", outputImage);
+    cv::Mat_<double> sub_image;
+    cv::subtract(inputImage, outputImage, sub_image);
+    sub_image.convertTo(outputImage, CV_8UC1);
 }
 // ---------------------------------------------------------------------------------

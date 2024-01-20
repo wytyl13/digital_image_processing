@@ -45,17 +45,35 @@ int main(int argc, char const *argv[])
 
     vector<Mat> multiImage;
     cv::Mat noise_image;
+    General general = General();
+    general.saltPepper(inputImage, noise_image, 8.0, 50.0);
+    multiImage.push_back(inputImage);
+    general.general_filter_thread(inputImage, outputImage, \
+        General::LAPULASI_FILTER_1, 8);
+    cv::imwrite("c:/users/weiyutao/desktop/laplas1.png", outputImage);
+    multiImage.push_back(outputImage);
+    general.general_filter_thread(inputImage, outputImage, \
+        General::LAPULASI_FILTER_2, 8);
+    cv::imwrite("c:/users/weiyutao/desktop/laplas2.png", outputImage);
+    cv::imwrite("c:/users/weiyutao/desktop/original_image.png", inputImage);
+    multiImage.push_back(outputImage);
+
+    // multiImage.push_back(inputImage + outputImage);
+    // general.general_filter_thread(inputImage, outputImage, General::LAPULASI_FILTER_2, 8);
+    // multiImage.push_back(inputImage + outputImage);
     // guassian_noise(inputImage, noise_image, 0.0, 50.0);
-    saltPepper(inputImage, noise_image, 8, 100);
-    multiImage.push_back(noise_image);
-    median_filter_thread(noise_image, outputImage, 3, 4);
-    multiImage.push_back(outputImage);
-    median_filter_thread(noise_image, outputImage, 11, 4);
-    multiImage.push_back(outputImage);
-    median_filter_thread(noise_image, outputImage, 15, 4);
-    multiImage.push_back(outputImage);
+    // saltPepper(inputImage, noise_image, 8, 100);
+    // multiImage.push_back(noise_image);
+    // median_filter_thread(noise_image, outputImage, 3, 4);
+    // multiImage.push_back(outputImage);
+    // median_filter_thread(noise_image, outputImage, 11, 4);
+    // multiImage.push_back(outputImage);
+    // median_filter_thread(noise_image, outputImage, 15, 4);
+    // multiImage.push_back(outputImage);
+
+
     string str_window = "histogram local equalization";
-    multiImshow(str_window, multiImage);
+    general.multiImshow(str_window, multiImage);
     
     waitKey(0);
     destroyAllWindows();
