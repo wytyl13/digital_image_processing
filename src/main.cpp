@@ -35,6 +35,11 @@ void test()
     cv::waitKey(0);
 }
 
+void test_laplas() 
+{
+    return;
+}
+
 int main(int argc, char const *argv[])
 {
     std::string dark_image = "C:\\Users\\weiyutao\\development_code_2023-01-28\\vscode\\digital_image_processing\\source\\images\\高圆圆4.jpeg";
@@ -46,6 +51,32 @@ int main(int argc, char const *argv[])
     vector<Mat> multiImage;
     cv::Mat noise_image;
     General general = General();
+
+    #if 1
+    multiImage.push_back(inputImage);
+    // soble edge
+    general.general_filter_thread(inputImage, outputImage, General::SOBEL_LEFT, General::SOBEL_RIGHT, 1);
+    multiImage.push_back(outputImage);
+    cv::imwrite("c:/users/weiyutao/desktop/sobel_edge.png", outputImage);
+
+    // laplas edge
+    general.general_filter_thread(inputImage, outputImage, General::LAPULASI_FILTER_1, cv::Mat_<int>(), 1);
+    cv::imwrite("c:/users/weiyutao/desktop/laplas_edge.png", outputImage);
+    multiImage.push_back(outputImage);
+
+    // sobel enhancement
+    cv::imwrite("c:/users/weiyutao/desktop/original_image.png", inputImage);
+    general.general_filter_thread(inputImage, outputImage, General::SOBEL_LEFT, General::SOBEL_RIGHT);
+    cv::imwrite("c:/users/weiyutao/desktop/sobel_enhancement.png", outputImage);
+
+    // laplas enhancement.
+    general.general_filter_thread(inputImage, outputImage, General::LAPULASI_FILTER_2);
+    cv::imwrite("c:/users/weiyutao/desktop/laplas_enhancement.png", outputImage);
+    #endif
+
+
+    #if 0
+    test the laplas operation.
     general.saltPepper(inputImage, noise_image, 8.0, 50.0);
     multiImage.push_back(inputImage);
     general.general_filter_thread(inputImage, outputImage, \
@@ -56,21 +87,24 @@ int main(int argc, char const *argv[])
         General::LAPULASI_FILTER_2, 8);
     cv::imwrite("c:/users/weiyutao/desktop/laplas2.png", outputImage);
     cv::imwrite("c:/users/weiyutao/desktop/original_image.png", inputImage);
+    multiImage.push_back(outputImage); 
+    #endif
+
+    #if 0
+    test the mean and median filter 
+    multiImage.push_back(inputImage + outputImage);
+    general.general_filter_thread(inputImage, outputImage, General::LAPULASI_FILTER_2, 8);
+    multiImage.push_back(inputImage + outputImage);
+    guassian_noise(inputImage, noise_image, 0.0, 50.0);
+    saltPepper(inputImage, noise_image, 8, 100);
+    multiImage.push_back(noise_image);
+    median_filter_thread(noise_image, outputImage, 3, 4);
     multiImage.push_back(outputImage);
-
-    // multiImage.push_back(inputImage + outputImage);
-    // general.general_filter_thread(inputImage, outputImage, General::LAPULASI_FILTER_2, 8);
-    // multiImage.push_back(inputImage + outputImage);
-    // guassian_noise(inputImage, noise_image, 0.0, 50.0);
-    // saltPepper(inputImage, noise_image, 8, 100);
-    // multiImage.push_back(noise_image);
-    // median_filter_thread(noise_image, outputImage, 3, 4);
-    // multiImage.push_back(outputImage);
-    // median_filter_thread(noise_image, outputImage, 11, 4);
-    // multiImage.push_back(outputImage);
-    // median_filter_thread(noise_image, outputImage, 15, 4);
-    // multiImage.push_back(outputImage);
-
+    median_filter_thread(noise_image, outputImage, 11, 4);
+    multiImage.push_back(outputImage);
+    median_filter_thread(noise_image, outputImage, 15, 4);
+    multiImage.push_back(outputImage);
+    #endif
 
     string str_window = "histogram local equalization";
     general.multiImshow(str_window, multiImage);

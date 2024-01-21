@@ -37,6 +37,8 @@ public:
 
     static const cv::Mat_<int> LAPULASI_FILTER_1;
     static const cv::Mat_<int> LAPULASI_FILTER_2;
+    static const cv::Mat_<int> SOBEL_LEFT;
+    static const cv::Mat_<int> SOBEL_RIGHT;
 
     /**
      * @Author: weiyutao
@@ -219,10 +221,11 @@ public:
     void general_filter_function(Mat temp_mat, Mat temp_mat_, \
         const cv::Mat filter, int cols_thread, \
         int rows_thread, int half_side_length, int side_length, \
+        const cv::Mat filter_sobel_right, const int edge_flag, \
         const int total_pixel_filter = 0);
 
-    void general_filter_thread(Mat inputImage, Mat &outputImage,
-                            const cv::Mat filter, int thread_numbers);
+    void general_filter_thread(Mat inputImage, Mat &outputImage, const cv::Mat filter, \
+        const cv::Mat filter_sobel_right = cv::Mat_<int>(3, 3), const int edge_flag = 0, int thread_numbers = 8);
     // -------------------------------------------------------------
 };
 

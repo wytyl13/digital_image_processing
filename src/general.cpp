@@ -3,6 +3,9 @@
 cv::Mat_<uchar> MEAN_FILTER = (cv::Mat_<uchar>(3, 3) << 1, 1, 1, 1, 1, 1, 1, 1, 1);
 const cv::Mat_<int> General::LAPULASI_FILTER_1 = (cv::Mat_<int>(3, 3) << 0, 1, 0, 1, -4, 1, 0, 1, 0);
 const cv::Mat_<int> General::LAPULASI_FILTER_2 = (cv::Mat_<int>(3, 3) << 1, 1, 1, 1, -8, 1, 1, 1, 1);
+const cv::Mat_<int> General::SOBEL_LEFT = (cv::Mat_<int>(3, 3) << -1, -2, -1, 0, 0, 0, 1, 2, 1);
+const cv::Mat_<int> General::SOBEL_RIGHT = (cv::Mat_<int>(3, 3) << -1, 0, 1, -2, 0, 2, -1, 0, 1);
+
 
 double *General::getDistribution(Mat inputImage) 
 {
@@ -1150,9 +1153,11 @@ void General::saltPepper(cv::Mat input_image, cv::Mat &output_image, const int n
 void General::general_filter_function(Mat temp_mat, Mat temp_mat_, \
     const cv::Mat filter, int cols_thread, \
     int rows_thread, int half_side_length, int side_length, \
-    const int total_pixel_filter) 
+    const cv::Mat filter_sobel_right, const int edge_flag, const int total_pixel_filter) 
 {
     cv::Mat_<double> result_;
+    cv::Mat_<double> result__;
+    double amplitude_value, sum_result_, sum_result__, mean_sub_mat, change_value;
     for (int row = 0; row < rows_thread; row++)
     {
         for (int col = 0; col < cols_thread; col++)
@@ -1160,13 +1165,29 @@ void General::general_filter_function(Mat temp_mat, Mat temp_mat_, \
             // 扫描到的子图
             Mat sub_mat = temp_mat_(Rect(col, row, side_length, side_length));
             cv::multiply(sub_mat, filter, result_);
-            temp_mat.at<double>(row + half_side_length, col + half_side_length) = cv::sum(result_)[0];
+            sum_result_ = cv::sum(result_)[0];
+            if (!filter_sobel_right.empty())
+            {
+                cv::multiply(sub_mat, filter_sobel_right, result__);
+                sum_result__ = cv::sum(result__)[0];
+                mean_sub_mat = cv::mean(sub_mat)[0];
+                amplitude_value = std::sqrt(std::pow(sum_result_, 2) + std::pow(sum_result__, 2));
+                // change_value = edge_flag ? 0.0 : amplitude_value;
+                // temp_mat.at<double>(row + half_side_length, col + half_side_length) = \
+                //     (amplitude_value <= mean_sub_mat) ? 0.0 : amplitude_value;
+                temp_mat.at<double>(row + half_side_length, col + half_side_length) = amplitude_value;
+            }
+            else
+            {
+                temp_mat.at<double>(row + half_side_length, col + half_side_length) = sum_result_;
+            }
         }
     }
 }
 
-void General::general_filter_thread(Mat inputImage, Mat &outputImage,
-                            const cv::Mat filter, int thread_numbers) 
+void General::general_filter_thread(Mat inputImage, Mat &outputImage, \
+    const cv::Mat filter, const cv::Mat filter_sobel_right, const int edge_flag, \
+    int thread_numbers) 
 {
     int side_length = filter.cols;
     int total_pixel_filter = cv::sum(filter)[0];
@@ -1236,7 +1257,8 @@ void General::general_filter_thread(Mat inputImage, Mat &outputImage,
         Mat temp_mat_ = padding_mat(Rect(x, y, width, height));
         cv::Mat_<double> result;
         thread *thread_pointer = new thread(&General::general_filter_function, this, temp_mat, temp_mat_, \
-            filter, cols_thread, rows_thread, half_side_length, side_length, total_pixel_filter);
+            filter, cols_thread, rows_thread, half_side_length, side_length, \
+            filter_sobel_right, edge_flag, total_pixel_filter);
         thread_vectors.push_back(thread_pointer);
     }
 
@@ -1253,10 +1275,26 @@ void General::general_filter_thread(Mat inputImage, Mat &outputImage,
     end = time(NULL);
     std::cout << end - start << std::endl;
     outputImage = outputImage(Rect(half_side_length, half_side_length, cols, rows));
-
-    // cv::imwrite("c:/users/weiyutao/desktop/enhancement.png", outputImage);
-    cv::Mat_<double> sub_image;
-    cv::subtract(inputImage, outputImage, sub_image);
-    sub_image.convertTo(outputImage, CV_8UC1);
+    if (filter_sobel_right.empty())
+    {
+        if (edge_flag)
+        {
+            outputImage.convertTo(outputImage, CV_8UC1);
+            return;
+        }
+        printf("WHOAMI\n");
+        cv::Mat_<double> sub_image;
+        cv::subtract(inputImage, outputImage, sub_image);
+        sub_image.convertTo(outputImage, CV_8UC1);
+    }
+    else
+    {
+        // 进入了这个分支，导致计算错误
+        double alpha = edge_flag ? 0 : 0.5;
+        double beta = 1 - alpha;
+        cv::Mat_<double> add_weight_image;
+        cv::addWeighted(inputImage, alpha, outputImage, beta, 0, add_weight_image);
+        add_weight_image.convertTo(outputImage, CV_8UC1);
+    }
 }
 // ---------------------------------------------------------------------------------
